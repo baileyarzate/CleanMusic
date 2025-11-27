@@ -1,4 +1,5 @@
 import sys
+import types
 from unittest.mock import MagicMock
 
 # Mock TTS before importing project modules to avoid dependency errors in test env
@@ -6,7 +7,20 @@ sys.modules["TTS"] = MagicMock()
 sys.modules["TTS.api"] = MagicMock()
 sys.modules["pydub"] = MagicMock()
 sys.modules["whisper"] = MagicMock()
-sys.modules["torch"] = MagicMock()
+
+# Minimal torch stub so src.lyrics can call torch.cuda.is_available()
+torch_module = types.ModuleType("torch")
+torch_module.cuda = types.SimpleNamespace(is_available=lambda: False)
+sys.modules["torch"] = torch_module
+
+# Avoid importing heavy separator/voice modules during tests
+separator_stub = types.ModuleType("src.separator")
+separator_stub.separate_vocals = MagicMock()
+sys.modules["src.separator"] = separator_stub
+
+voice_stub = types.ModuleType("src.voice_synth")
+voice_stub.VoiceSynthesizer = MagicMock()
+sys.modules["src.voice_synth"] = voice_stub
 
 import unittest
 from unittest.mock import patch
@@ -67,6 +81,9 @@ class TestCleanMusicPipeline(unittest.TestCase):
         self.assertEqual(kwargs['text'], "ship") # text argument
         
         mock_create_clean.assert_called_once()
+        _, create_kwargs = mock_create_clean.call_args
+        self.assertEqual(create_kwargs["vocals_path"], "vocals.wav")
+        self.assertEqual(create_kwargs["instrumental_path"], "instrumental.wav")
 
 if __name__ == "__main__":
     unittest.main()

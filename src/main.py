@@ -15,6 +15,19 @@ def main():
     parser.add_argument("--output", default="data/clean_song.mp3", help="Path to the output clean audio.")
     parser.add_argument("--model_size", default="base", help="Whisper model size (tiny, base, small, medium, large).")
     parser.add_argument("--skip_separation", action="store_true", help="Skip source separation (for testing mixing only).")
+    parser.add_argument(
+        "--use_synth",
+        action="store_true",
+        help="Enable voice synthesis for cuss words."
+    )
+    parser.add_argument(
+        "--no_use_synth",
+        dest="use_synth",
+        action="store_false",
+        help="Disable voice synthesis."
+    )
+    parser.set_defaults(use_synth=True)
+
     
     args = parser.parse_args()
     
@@ -44,6 +57,7 @@ def main():
     # 3. Source Separation
     print("--- Step 3: Source Separation ---")
     if not args.skip_separation:
+        print("Separating vocals and instrumental...")
         vocals_path, instrumental_path = separate_vocals(input_path)
     else:
         # Fallback for testing if files exist
@@ -56,36 +70,48 @@ def main():
 
     # 4. Voice Synthesis
     print("--- Step 4: Voice Synthesis ---")
-    try:
-        synth = VoiceSynthesizer()
-        
-        synth_dir = "data/synth"
-        os.makedirs(synth_dir, exist_ok=True)
-        
-        for i, seg in enumerate(cuss_segments):
-            replacement = seg['replacement']
-            # Unique filename for this instance
-            output_name = f"{replacement}_{i}.wav"
-            output_path = os.path.join(synth_dir, output_name)
+    if args.use_synth:
+        try:
+            synth = VoiceSynthesizer()
+            synth_dir = "data/synth"
+            os.makedirs(synth_dir, exist_ok=True)
             
-            # Check if already exists to save time (simple caching)
-            if not os.path.exists(output_path):
-                synth.generate_speech(
-                    text=replacement,
-                    speaker_wav=vocals_path, # Use extracted vocals as reference
-                    output_path=output_path
-                )
-            
-            # Store the specific path in the segment for the mixer
-            seg['synth_path'] = output_path
-            
-    except Exception as e:
-        print(f"Warning: Voice synthesis failed or not set up correctly: {e}")
-        print("Proceeding with instrumental-only replacement (silence for cuss words).")
+            for i, seg in enumerate(cuss_segments):
+                replacement = seg['replacement']
+                # Unique filename for this instance
+                output_name = f"{replacement}_{i}.wav"
+                output_path = os.path.join(synth_dir, output_name)
+                
+                # Check if already exists to save time (simple caching)
+                if not os.path.exists(output_path):
+                    # Calculate duration of the segment
+                    duration = seg['end'] - seg['start']
+                    
+                    synth.generate_speech(
+                        text=replacement,
+                        speaker_wav=vocals_path, # Use extracted vocals as reference
+                        output_path=output_path,
+                        duration=duration
+                    )
+                
+                # Store the specific path in the segment for the mixer
+                seg['synth_path'] = output_path
+                
+        except Exception as e:
+            print(f"Warning: Voice synthesis failed or not set up correctly: {e}")
+            print("Proceeding with instrumental-only replacement (silence for cuss words).")
+    else:
+        print("Voice synthesis disabled. Using silence for cuss words.")
 
     # 5. Mixing
     print("--- Step 5: Mixing ---")
-    create_clean_version(input_path, instrumental_path, cuss_segments, output_path=args.output)
+    create_clean_version(
+        original_audio_path=input_path,
+        instrumental_path=instrumental_path,
+        cuss_segments=cuss_segments,
+        vocals_path=vocals_path,
+        output_path=args.output
+    )
     
     print(f"Done! Clean version saved to: {args.output}")
 
