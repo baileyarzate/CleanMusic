@@ -1,6 +1,6 @@
 # CleanMusic
 
-AI-powered tool to "clean" explicit songs by replacing cuss words with phonetically similar alternatives using source separation, ASR, and voice cloning.
+AI-powered tool to "clean" explicit songs by replacing cuss words with silence while maintaining the beat. Goal is to make it replace it with phonetically similar alternatives using source separation, ASR, and voice cloning.
 
 ## Prerequisites
 
